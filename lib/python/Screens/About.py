@@ -108,7 +108,7 @@ class About(Screen):
 
 	def getDriverInstalledDate(self):
 		try:
-			driver = os.popen("opkg list-installed | grep vuplus-dvb").read().strip()
+			driver = os.popen("opkg list-installed | grep fulan-dvb-modules").read().strip()
 			driver = driver.split("-")
 			#return driver[:4] + "-" + driver[4:6] + "-" + driver[6:]
 			return driver[5]
@@ -117,7 +117,7 @@ class About(Screen):
 			
 	def getDriverInstalledDate_proxy(self):
 		try:
-			driver = os.popen("opkg list-installed | grep vuplus-dvb-proxy").read().strip()
+			driver = os.popen("opkg list-installed | grep fulan-dvb-proxy").read().strip()
 			driver = driver.split("-")
 			driver = driver[4].split(".")
 			#return driver[:4] + "-" + driver[4:6] + "-" + driver[6:]
