@@ -156,8 +156,6 @@ class ChannelContextMenu(Screen):
 		from Components.ParentalControl import parentalControl
 		self.parentalControl = parentalControl
 		self.parentalControlEnabled = config.ParentalControl.servicepin[0].value and config.ParentalControl.servicepinactive.value
-		if not (current_sel_path or current_sel_flags & (eServiceReference.isDirectory|eServiceReference.isMarker)) or current_sel_flags & eServiceReference.isGroup:
-			append_when_current_valid(current, menu, (_("show transponder info"), self.showServiceInformations), level=2)
 		if csel.bouquet_mark_edit == OFF and not csel.entry_marked:
 			if not inBouquetRootList:
 				isPlayable = not (current_sel_flags & (eServiceReference.isMarker|eServiceReference.isDirectory))
@@ -450,17 +448,6 @@ class ChannelContextMenu(Screen):
 
 	def cancelClick(self, dummy=False):
 		self.close(False)
-
-	def showServiceInformations(self):
-		current = self.csel.getCurrentSelection()
-		if current.flags & eServiceReference.isGroup:
-			playingref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
-			if playingref and playingref == current:
-				current = self.session.nav.getCurrentlyPlayingServiceReference()
-			else:
-				current = eServiceReference(GetWithAlternative(current.toString()))
-		self.session.open(ServiceInfo, current)
-		self.close()
 
 	def setStartupService(self):
 		self.session.openWithCallback(self.setStartupServiceCallback, MessageBox, _("Set startup service"), list = [(_("Only on startup"), "startup"), (_("Also on standby"), "standby")])
