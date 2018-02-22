@@ -10,7 +10,7 @@ from Components.Label import Label
 from Components.Language import language
 from Components.Harddisk import harddiskmanager
 from Components.Sources.StaticText import StaticText
-from Components.SystemInfo import SystemInfo, hassoftcaminstalled
+from Components.SystemInfo import SystemInfo
 from Components import Ipkg
 from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
@@ -297,8 +297,6 @@ class PluginDownloadBrowser(Screen):
 			self["text"].setText(_("Reloading bouquets and services..."))
 			eDVBDB.getInstance().reloadBouquets()
 			eDVBDB.getInstance().reloadServicelist()
-		if self.check_softcams:
-			SystemInfo["HasSoftcamInstalled"] = hassoftcaminstalled()
 		plugins.readPluginList(resolveFilename(SCOPE_PLUGINS))
 		self.container.appClosed.remove(self.runFinished)
 		self.container.dataAvail.remove(self.dataAvail)
