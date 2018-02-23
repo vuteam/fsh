@@ -122,7 +122,6 @@ struct eit_short_event_descriptor_struct {
 };
 
 #define EIT_EXTENDED_EVENT_DESCRIPOR 0x4e
-#define EIT_EXTENDED_EVENT_DESCRIPTOR_SIZE 6
 
 typedef struct eit_event_struct {
 	u_char	event_id_hi			: 8;
