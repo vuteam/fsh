@@ -46,9 +46,8 @@ enigma2_LDADD = \
 	@AMADEC_LIBS@ \
 	@DVBCSA_LIBS@ \
 	@AVAHI_LIBS@ \
-	@LIBDL_LIBS@ \
-	-ltuxtxt32bpp \
-	-lpthread -lresolv -lmmeimage
+	ltuxtxt -ltuxtxt32bpp -lcrypt \
+	-ldl -lpthread -lcrypt -lresolv -lrt -lmmeimage
 
 if ENABLE_LIBEPLAYER3
 enigma2_LDADD += \
