@@ -704,7 +704,8 @@ bool eEPGCache::FixOverlapping(EventCacheItem &servicemap, time_t TM, int durati
 {
 	bool ret = false;
 	timeMap::iterator tmp = tm_it;
-	while ((tmp->first + tmp->second->getDuration() - 300) > TM)
+
+	while ((tmp->first + tmp->second->getDuration() - 60) > TM)
 	{
 		if(tmp->first != TM
 #ifdef ENABLE_PRIVATE_EPG
@@ -746,7 +747,7 @@ bool eEPGCache::FixOverlapping(EventCacheItem &servicemap, time_t TM, int durati
 	}
 
 	tmp = tm_it;
-	while(tmp->first < (TM+duration-300))
+	while(tmp->first < (TM + duration - 60))
 	{
 		if (tmp->first != TM && tmp->second->type != PRIVATE)
 		{
@@ -1145,7 +1146,7 @@ eEPGCache::~eEPGCache()
 	messages.send(Message::quit);
 	kill(); // waiting for thread shutdown
 	singleLock s(cache_lock);
-	for (eventCache::iterator evIt = eventDB.begin(); evIt != eventDB.end(); ++evIt)
+	for (eventCache::iterator evIt = eventDB.begin(); evIt != eventDB.end(); evIt++)
 		for (eventMap::iterator It = evIt->second.byEvent.begin(); It != evIt->second.byEvent.end(); It++)
 			delete It->second;
 }
@@ -1344,9 +1345,10 @@ void eEPGCache::load()
 				{
 					uint8_t len=0;
 					uint8_t type=0;
+					eventData *event=0;
 					fread( &type, sizeof(uint8_t), 1, f);
 					fread( &len, sizeof(uint8_t), 1, f);
-					eventData *event = new eventData(0, len, type);
+					event = new eventData(0, len, type);
 					event->n_crc = (len-10) / sizeof(uint32_t);
 					fread( event->rawEITdata, 10, 1, f);
 					if (event->n_crc)
@@ -2154,44 +2156,6 @@ void eEPGCache::channel_data::readData( const uint8_t *data, int source)
 {
 	int map;
 	iDVBSectionReader *reader = NULL;
-#ifdef __sh__
-/* Dagobert: this is still very hacky, but currently I cant find
- * the origin of the readData call. I think the caller is
- * responsible for the unaligned data pointer in this call.
- * So we malloc our own memory here which _should_ be aligned.
- *
- * TODO: We should search for the origin of this call. As I
- * said before I need an UML Diagram or must try to import
- * e2 and all libs into an IDE for better overview ;)
- *
- */
-	const uint8_t *aligned_data;
-	bool isNotAligned = false;
-
-	if ((unsigned int) data % 4 != 0)
-		isNotAligned = true;
-
-	if (isNotAligned)
-	{
-		int len = ((data[1] & 0x0F) << 8 | data[2]) -1;
-
-		/*eDebug("len %d %x, %x %x\n", len, len, data[1], data[2]);*/
-
-		if ( EIT_SIZE >= len )
-			return;
-
-		aligned_data = (const uint8_t *) malloc(len);
-
-		if ((unsigned int)aligned_data % 4 != 0)
-		{
-			eDebug("eEPGCache::channel_data::readData: ERRORERRORERROR: unaligned data pointer %p\n", aligned_data);
-		}
-
-		/*eDebug("%p %p\n", aligned_data, data); */
-		memcpy((void *) aligned_data, (const uint8_t *) data, len);
-		data = aligned_data;
-	}
-#endif
 	switch (source)
 	{
 		case NOWNEXT:
@@ -2316,10 +2280,6 @@ void eEPGCache::channel_data::readData( const uint8_t *data, int source)
 			cache->sectionRead(data, source, this);
 		}
 	}
-#ifdef __sh__
-	if (isNotAligned)
-		free((void *)aligned_data);
-#endif
 }
 
 #if ENABLE_FREESAT
@@ -3324,8 +3284,6 @@ void eEPGCache::importEvents(ePyObject serviceReferences, ePyObject list)
 //     1 = search events with exactly title name (EXACT_TITLE_SEARCH)
 //     2 = search events with text in title name (PARTIAL_TITLE_SEARCH)
 //     3 = search events starting with title name (START_TITLE_SEARCH)
-//     4 = search events ending with title name (END_TITLE_SEARCH)
-//     5 = search events with text in description (PARTIAL_DESCRIPTION_SEARCH)
 //  when type is 0 (SIMILAR_BROADCASTINGS_SEARCH)
 //   the fourth is the servicereference string
 //   the fifth is the eventid
@@ -3459,9 +3417,9 @@ PyObject *eEPGCache::search(ePyObject arg)
 					int casetype = PyLong_AsLong(PyTuple_GET_ITEM(arg, 4));
 					const char *str = PyString_AS_STRING(obj);
 #if PY_VERSION_HEX < 0x02060000
-					int strlen = PyString_GET_SIZE(obj);
+					int textlen = PyString_GET_SIZE(obj);
 #else
-					int strlen = PyString_Size(obj);
+					int textlen = PyString_Size(obj);
 #endif
 					switch (querytype)
 					{
@@ -3474,89 +3432,63 @@ PyObject *eEPGCache::search(ePyObject arg)
 						case 3:
 							eDebug("[eEPGCache] lookup events, title starting with '%s' (%s)", str, casetype?"ignore case":"case sensitive");
 							break;
-						case 4:
- 							eDebug("[eEPGCache] lookup events, title ending with '%s' (%s)", str, casetype?"ignore case":"case sensitive");
- 							break;
-						case 5:
-							eDebug("[eEPGCache] lookup events with '%s' in the description (%s)", str, casetype?"ignore case":"case sensitive");
-							break;	
 					}
 					Py_BEGIN_ALLOW_THREADS; /* No Python code in this section, so other threads can run */
 					singleLock s(cache_lock);
-					std::string text;
+					std::string title;
 					for (DescriptorMap::iterator it(eventData::descriptors.begin());
 						it != eventData::descriptors.end(); ++it)
 					{
 						uint8_t *data = it->second.data;
-						int textlen = 0;
-						if ( data[0] == 0x4D && querytype > 0 && querytype < 5 ) // short event descriptor
+						if ( data[0] == 0x4D ) // short event descriptor
 						{
-							const char *textptr = (const char*)&data[6];
-							textlen = data[5];
+							const char *titleptr = (const char*)&data[6];
+							int title_len = data[5];
 							if (data[6] < 0x20)
 							{
 								/* custom encoding */
-								text = convertDVBUTF8((unsigned char*)textptr, textlen, 0x40, 0);
-								textptr = text.data();
-								textlen = text.length();
+								title = convertDVBUTF8((unsigned char*)titleptr, title_len, 0x40, 0);
+								titleptr = title.data();
+								title_len = title.length();
 							}
-					}
-						else if ( data[0] == 0x4E 0 && querytype == 5 ) // extended event descriptor
-						{
-							const char *textptr = (const char*)&data[8];
-							textlen = data[7];
-							if (data[8] < 0x20)
+							if (title_len < textlen)
+								/*Doesn't fit, so cannot match anything */
+								continue;
+							if (querytype == 1)
 							{
-								/* custom encoding */
-								text = convertDVBUTF8((unsigned char*)textptr, textlen, 0x40, 0);
-								textptr = text.data();
-								textlen = text.length();
-							}
-						}
-						/* if we have a descriptor, the argument may not be bigger */
-						if (textlen > 0 && strlen <= textlen )
-						{		
-						        if (querytype == 1)
-							{
-								/* require exact text match */
-								if (textlen != strlen)
+								/* require exact title match */
+								if (title_len != textlen)
 									continue;
 							}
 							else if (querytype == 3)
 							{
 								/* Do a "startswith" match by pretending the text isn't that long */
-								textlen = strlen;
+								title_len = textlen;
 							}
-							else if (querytype == 4)
- 							{
- 								/* Offset to adjust the pointer based on the text length difference */
-								textptr = textptr + textlen - strlen;
-+								textlen = strlen;
-							}	
 							if (casetype)
 							{
-								while (textlen >= strlen)
+								while (title_len >= textlen)
 								{
-									if (!strncasecmp(titleptr, str, strlen))
+									if (!strncasecmp(titleptr, str, textlen))
 									{
 										descr.push_back(it->first);
 										break;
 									}
-									textlen--;
-									textptr++;
+									title_len--;
+									titleptr++;
 								}
 							}
 							else
 							{
-								while (textlen >= strlen)
+								while (title_len >= textlen)
 								{
-									if (!memcmp(textptr, str, strlen))
+									if (!memcmp(titleptr, str, textlen))
 									{
 										descr.push_back(it->first);
 										break;
 									}
-									textlen--;
-									textptr++;
+									title_len--;
+									titleptr++;
 								}
 							}
 						}
